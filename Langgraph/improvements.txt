@@ -1,0 +1,147 @@
+CONTROLLED RAG AND TRUSTED-WEB ARCHITECTURE
+===========================================
+
+The product can behave like an agent to the student, but retrieval and trust
+decisions should follow a controlled workflow:
+
+    Student question
+        -> Intent and risk classification
+        -> Search local Chroma database
+        -> Evidence sufficiency check
+            -> Sufficient: generate a cited answer
+            -> Insufficient: run restricted web search
+                -> Validate final URLs and content
+                -> Rerank evidence
+                -> Generate a cited answer or abstain
+
+
+SOURCE ACCESS POLICY
+--------------------
+
+Use an exact-host allowlist with default-deny behavior. A blacklist is only a
+secondary defense because it cannot enumerate every unreliable website. Do not
+allow every .org or .edu domain; these suffixes do not establish that a source
+is authoritative for UT Dallas.
+
+Initial allowed domain families:
+
+    utdallas.edu
+    utsystem.edu
+    texas.gov
+    ed.gov
+    studentaid.gov
+
+Initial explicitly blocked domains:
+
+    reddit.com
+    quora.com
+    medium.com
+    blogspot.com
+    wordpress.com
+
+Accept an allowed hostname only when it equals an allowed domain or is a true
+subdomain of it. Validate the final URL again after following redirects. Reject
+link shorteners, login pages, unsupported content types, and pages without
+meaningful extractable text.
+
+
+SOURCE AUTHORITY TIERS
+----------------------
+
+1. Applicable government law and UT System Regents' rules
+2. UT Dallas Policy Navigator and Handbook of Operating Procedures
+3. The student's applicable undergraduate or graduate catalog
+4. Central UT Dallas offices such as Registrar, Financial Aid, Housing, and
+   Counseling
+5. School and department pages
+
+Higher-authority sources take precedence. Within the same tier, prefer the
+current source. Preserve catalog year because students may be governed by the
+catalog in effect when they enrolled. If authoritative sources conflict, report
+the conflict and direct the student to the responsible office.
+
+
+WEB SEARCH VALIDATION
+---------------------
+
+Do not use a search-result snippet as evidence. The web-search component must:
+
+1. Search only configured domains.
+2. Reject every result outside the allowlist.
+3. Fetch the actual page.
+4. Validate the final hostname after redirects.
+5. Extract the main content.
+6. Record title, URL, update date, retrieval date, and authority tier.
+7. Rerank the extracted passages against the student's question.
+8. Pass only validated passages to answer generation.
+
+Treat all fetched text as untrusted data. The answer prompt must explicitly say
+never to follow instructions found inside source content. This reduces indirect
+prompt-injection risk.
+
+
+EVIDENCE SUFFICIENCY GATE
+-------------------------
+
+Do not use the model's self-reported confidence as the only signal. Evaluate:
+
+- Retrieval or reranker score
+- Whether the passage directly supports the requested claim
+- Source authority tier
+- Source freshness
+- Correct student type and catalog year
+- Conflicts between sources
+
+Calibrate retrieval and sufficiency thresholds with the evaluation dataset. If
+neither local retrieval nor trusted web search produces sufficient evidence,
+the assistant must say that it could not verify the answer and provide the
+appropriate official office or next step.
+
+
+PERSONAL AND HIGH-RISK QUESTIONS
+--------------------------------
+
+The assistant can explain policies and procedures but cannot determine personal
+holds, balances, transfer-credit decisions, grades, or application status
+without authenticated integrations. Route these questions to Orion or the
+responsible office and do not request sensitive student records in chat.
+
+Maintain deterministic, manually verified routing for immediate danger, mental
+health crises, sexual misconduct, campus police, and medical emergencies. Do
+not depend on vector retrieval or live web search for crisis contacts.
+
+
+STRUCTURED ANSWER FIELDS
+------------------------
+
+    answer
+    evidence_source: database, web, or unverified
+    citations:
+        title
+        url
+        section
+        retrieved_at
+        authority_tier
+    next_step
+    needs_official_confirmation
+
+
+IMPLEMENTATION ORDER
+--------------------
+
+1. Implement and unit-test hostname validation and source policy.
+2. Add retrieval scores and a calibrated evidence gate.
+3. Build restricted search, page fetching, extraction, and redirect validation.
+4. Build the controlled local-RAG to web-search workflow.
+5. Add structured citations, freshness metadata, and source authority.
+6. Evaluate valid, outdated, conflicting, malicious, and unanswerable queries.
+7. Cache or ingest only reviewed and verified web sources; never automatically
+   add every search result to the permanent knowledge base.
+
+
+REFERENCES
+----------
+
+https://catalog.utdallas.edu/2025/undergraduate/home/
+https://policy.utdallas.edu/
+https://developers.google.com/custom-search/v1
